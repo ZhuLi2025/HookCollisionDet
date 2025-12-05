@@ -1,0 +1,6 @@
+sensor_msgs/PointCloud2 pointcloud_1
+sensor_msgs/PointCloud2 pointcloud_2
+sensor_msgs/Imu imu_data
+float64 arm_length
+float64 amplitude_angle
+float64 rotation_angle
