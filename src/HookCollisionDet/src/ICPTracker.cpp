@@ -176,7 +176,7 @@ bool ICPTracker<PointT>::targetTrack(
         ROS_INFO("[ICP tracker] ICP converged. score= %f , overlap= %f ",score,overlap);
         if (score < 0.1 && overlap > 0.6f) { // 双条件约束
             last_transform = icp.getFinalTransformation();
-            getTargetClusterAndEnvCloud_test(source, aligned,target_in_source, env_cloud);
+            getTargetClusterAndEnvCloud(source, aligned,target_in_source, env_cloud);
             return true;
         }
     }

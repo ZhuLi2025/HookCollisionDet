@@ -523,7 +523,7 @@ bool HookLoadPositionAcquirer<PointT>::getHookLoadCluster(  typename pcl::PointC
         return false; // 关键失败：没有输入点云
     }
     try{
-    // step1  直通滤波
+//============================== 绳索直线求取 =====================================
         // 获取开始时间
         auto start = std::chrono::high_resolution_clock::now();
 
@@ -597,6 +597,7 @@ bool HookLoadPositionAcquirer<PointT>::getHookLoadCluster(  typename pcl::PointC
         elapsed = end_step2 - end_step1;
         std::cout << "step2 took " << elapsed.count() << " seconds." << std::endl;
 
+//============================== 求吊钩锚点并根据锚点过滤点云 =====================================
     // step3 求聚类核心点（吊钩位置附近点）
         if (std::fabs(direction[0]) < DIRECTION_EPS) {
             ROS_WARN("[step3] direction[0] is too small (division risk).");
@@ -616,7 +617,7 @@ bool HookLoadPositionAcquirer<PointT>::getHookLoadCluster(  typename pcl::PointC
 
     // step4 提取吊钩点云
         typename pcl::PointCloud<PointT>::Ptr seedregion_cloud(new pcl::PointCloud<PointT>);
-        float x_range{10.0}, y_range{10.0}, z_range{10.0};
+        float x_range{10.0}, y_range{30.0}, z_range{30.0};
         pass_z.setInputCloud(cloud);
         pass_z.setFilterFieldName("z");
         pass_z.setFilterLimits(seed_point.z-z_range / 2,seed_point.z+z_range/ 2);
@@ -657,12 +658,15 @@ bool HookLoadPositionAcquirer<PointT>::getHookLoadCluster(  typename pcl::PointC
         ec.setInputCloud(seedregion_cloud);
         ec.extract(hook_cluster_indices);
         // 处理 hook cluster 结果
-        if (hook_cluster_indices.empty()) {
+        if (hook_cluster_indices.empty()) 
+        {
             ROS_INFO("[step4] no hook clusters found in seedregion.");
             // 这里认为未找到 hook，清空并返回 false（因为 seed region 本应包含吊钩）
             hookClusterInfo.clearAll();
             return false;
         }
+
+//============================== 提取吊钩 Hook 点云 =====================================
         //  4. 遍历每个簇，提取点云
         typename pcl::PointCloud<PointT>::Ptr cloud_hook(new pcl::PointCloud<PointT>);
         if(hook_cluster_indices.size() == 1){
@@ -720,7 +724,7 @@ bool HookLoadPositionAcquirer<PointT>::getHookLoadCluster(  typename pcl::PointC
 
 
 
-    // step5 提取吊载点云
+//============================== 提取吊载 Load 点云 =====================================
         loadClusterInfo.clearAll();
         if(load_exist_flag){
             // // 1. 提取种子区域点云（圆柱区域）

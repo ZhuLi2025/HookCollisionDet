@@ -1,6 +1,6 @@
 <launch>
-    <arg name="init_pcd_file" default="$(find hookload_det)/data/test2/1760681218.040858540.pcd"/> <!-- path to init pcd file -->
-    <arg name="test_pcd_files_dir" default="$(find hookload_det)/data/test2/"/> <!-- path to test pcd files fold-->
+    <arg name="init_pcd_file" default="$(find HookCollisionDet)/data/test2/1760681218.040858540.pcd"/> <!-- path to init pcd file -->
+    <arg name="test_pcd_files_dir" default="$(find HookCollisionDet)/data/test2/"/> <!-- path to test pcd files fold-->
 
     <node pkg="HookCollisionDet" type="HookCollisionDet" name="hook_det" output="screen">
         <param name="init_pcd_file" value="$(arg init_pcd_file)"/>

@@ -20,6 +20,9 @@
 #include <pcl/common/transforms.h>
 #include "CollisionDetector.h"
 #include "constants.h"
+#include <boost/filesystem.hpp>
+namespace fs = boost::filesystem;
+
 #define SAVE_CLOUD 1
 
 using namespace std;
@@ -161,7 +164,8 @@ int main(int argc, char** argv) {
     }
     // LivoxReader reader;
     // ros::spin();
-
+//================================ 初始化构建 ===================================
+    ROS_INFO("================================ Initialization ===================================\n");
     //创建吊钩吊载位置获取类对象
     auto hookLoadPositionAcquirer =std::make_shared<HookLoadPositionAcquirer<pcl::PointXYZ>>();
     ClusterInfo<pcl::PointXYZ> targetClusterInfo_last_frame;
@@ -184,7 +188,8 @@ int main(int argc, char** argv) {
 
     auto start0 = std::chrono::high_resolution_clock::now();
 
-
+//================================ 地毯滤波 ===================================
+    ROS_INFO("================================ CSF ===================================\n");
     // 坐标变换（CSF要求-Z轴方向为重力方向，改变点云坐标系）
     Eigen::Vector3f current_gravity(1.0f, 0.0f, 0.0f);        // 当前坐标系的重力方向：X轴（即(1, 0, 0)）
     Eigen::Vector3f target_gravity(0.0f, 0.0f, -1.0f);        // 目标坐标系的重力方向：Z轴（即(0, 0, 1)）
@@ -269,9 +274,11 @@ int main(int argc, char** argv) {
     Eigen::Affine3f inverse_transform = transform.inverse();
     pcl::transformPointCloud(*off_ground_cloud,*off_ground_cloud,inverse_transform);
     
+//================================ 吊钩吊载识别 ===================================
+    ROS_INFO("================================ Hook/Load Detection ===================================\n");
     //定义已知参数
-    float rope_len{30.0}; //卷扬绳下放长度
-    bool load_exist_flag{true}; 
+    float rope_len{63.0}; //卷扬绳下放长度
+    bool load_exist_flag{false}; //吊钩存在标志为
     b_hookload_position_acquisition_successed = hookLoadPositionAcquirer->getHookLoadCluster(off_ground_cloud,rope_len,load_exist_flag,hookClusterInfo,loadClusterInfo);
     Mode curFrameTargetDetMode ;
     if(b_hookload_position_acquisition_successed){
@@ -300,28 +307,45 @@ int main(int argc, char** argv) {
     pcl::visualization::PCLVisualizer::Ptr viewer(new pcl::visualization::PCLVisualizer("3D Viewer"));
     viewer->setBackgroundColor(0, 0, 0);
 
-
+//================================ 吊钩吊载跟踪 ===================================
+    ROS_INFO("================================ Hook/Load Track ===================================\n");
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
-    string pcdFilePath;
-    int n=1;
-    ClusterInfo<pcl::PointXYZ> targetClusterInfo_cur_frame;
-    while(1)
-    {          
-        pcdFilePath =test_pcd_files_dir+ std::to_string(n) + ".pcd";
+    // 读取目录下所有 pcd 文件
+    vector<std::string> pcd_files;
+    for (const auto& entry : fs::directory_iterator(test_pcd_files_dir)) {
+        if (entry.path().extension() == ".pcd") {
+            pcd_files.push_back(entry.path().string());
+        }
+    }
 
-        // 加载点云数据
+    std::sort(pcd_files.begin(), pcd_files.end());
+    if (pcd_files.empty()) {
+        ROS_ERROR("No PCD files in dir: %s", test_pcd_files_dir.c_str());
+        return 0;
+    }
+
+    ROS_INFO("Found %ld pcd files.", pcd_files.size());
+
+    int idx = 0;
+    ClusterInfo<pcl::PointXYZ> targetClusterInfo_cur_frame;
+    while (1)
+    {
+        string pcdFilePath = pcd_files[idx];
+
         if (pcl::io::loadPCDFile<pcl::PointXYZ>(pcdFilePath, *cloud) == -1) 
         {
-            PCL_ERROR("cant read the PCD file\n");
-            return 0;
+            ROS_ERROR("Cannot read PCD: %s", pcdFilePath.c_str());
+            idx = (idx + 1) % pcd_files.size();
+            continue;
         }
 
         auto start_track = std::chrono::high_resolution_clock::now();
+
     // step 1 IPC 匹配吊钩模板点云 与 当前帧点云
         pcl::PointCloud<pcl::PointXYZ>::Ptr env_cloud(new pcl::PointCloud<pcl::PointXYZ>());
         if(!icpTrack->targetTrack(cloud,targetClusterInfo_last_frame,targetClusterInfo_cur_frame,env_cloud)){
             ROS_INFO("icp track failed");
-            return 0;
+            continue;
         }
         targetClusterInfo_last_frame = targetClusterInfo_cur_frame; //深拷贝上帧的吊钩点云识别结果作为下一帧的匹配模板，如果识别错误则后续全部错误
     
@@ -334,7 +358,8 @@ int main(int argc, char** argv) {
         targetClusterInfo_last_frame.computeOBB();
 
         Eigen::Vector3f dir;//障碍物到目标方向向量
-        float min_dist = collisionDetector->computeMinDistance_OBB_surfaceKDTree(env_cloud, targetClusterInfo_last_frame.obb, dir, 0.2f, 4 );
+        float min_dist;
+        collisionDetector->computeMinDistance(env_cloud, targetClusterInfo_last_frame.obb, min_dist,dir, 0.2f, 4 );
         if (std::isfinite(min_dist)) {
             ROS_INFO("[Collision Detecte] Min distance = %f m ; Direction (unit) = [ %f , %f , %f ]",min_dist,dir.x(),dir.y(),dir.z());
         } else {
@@ -378,12 +403,7 @@ int main(int argc, char** argv) {
         // 刷新可视化窗口
         viewer->spinOnce(100);
         sleep(1);
-        n++;  
-
-        if(n>=36)
-            n =1;
+        idx = (idx + 1) % pcd_files.size();   // 循环读取   
     }
-    
-
     return 0;
 }

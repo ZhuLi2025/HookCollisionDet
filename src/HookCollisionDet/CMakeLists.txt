@@ -2,8 +2,7 @@ cmake_minimum_required(VERSION 3.0.2)
 project(HookCollisionDet)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
-add_compile_options(-std=c++14)
-
+set(CMAKE_CXX_STANDARD 14)
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
@@ -19,6 +18,7 @@ find_package(catkin REQUIRED COMPONENTS
 set(PCL_DIR "/usr/local/share/pcl-1.12")
 find_package(PCL 1.12 REQUIRED)
 find_package(PCL  REQUIRED )
+find_package(Boost REQUIRED COMPONENTS filesystem)
 
 
 find_package(OpenMP)
@@ -81,6 +81,5 @@ add_executable(HookCollisionDet
 target_link_libraries(  HookCollisionDet 
                         ${catkin_LIBRARIES}
                         ${PCL_LIBRARIES}
+                        Boost::filesystem
                         OpenMP::OpenMP_CXX)
-
-
