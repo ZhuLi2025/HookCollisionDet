@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0.2)
-project(hookload_det)
+project(HookCollisionDet)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 add_compile_options(-std=c++14)
@@ -69,7 +69,7 @@ include_directories(
 link_directories(${PCL_LIBRARY_DIRS})
 
 
-add_executable(hook_det_and_track_mouseclick_test  
+add_executable(HookCollisionDet  
                 src/livox_test.cpp 
                 src/HookLoadPositionAcquirer.cpp 
                 src/ICPTracker.cpp
@@ -78,7 +78,7 @@ add_executable(hook_det_and_track_mouseclick_test
 # src/CounterweightCrack.cpp
 )
 
-target_link_libraries(  hook_det_and_track_mouseclick_test 
+target_link_libraries(  HookCollisionDet 
                         ${catkin_LIBRARIES}
                         ${PCL_LIBRARIES}
                         OpenMP::OpenMP_CXX)

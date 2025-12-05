@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>hookload_det</name>
+  <name>HookCollisionDet</name>
   <version>0.0.0</version>
-  <description>The hookload_det package</description>
+  <description>The HookCollisionDet package</description>
 
   <!-- One maintainer tag required, multiple allowed, one person per tag -->
   <!-- Example:  -->
