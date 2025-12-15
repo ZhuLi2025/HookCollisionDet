@@ -98,6 +98,7 @@ void CSF::setPointCloud(csf::PointCloud& pc) {
     }
 }
 void CSF::setPointCloud(pcl::PointCloud<pcl::PointXYZ>::Ptr& pc) {
+    point_cloud_->points.clear();
     point_cloud_->points.reserve(pc->points.size());
     #ifdef USE_OPENMP
     #pragma omp parallel for

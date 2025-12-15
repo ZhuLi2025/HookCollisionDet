@@ -706,12 +706,20 @@ bool HookLoadPositionAcquirer<PointT>::getHookLoadCluster(  typename pcl::PointC
                     clusters.push_back(info);
                 }
             }
-            // 按质心到直线距离排序
-            std::sort(clusters.begin(), clusters.end(),
-                    [](const ClusterInfo<PointT> &a, const ClusterInfo<PointT> &b){
-                        return a.distance < b.distance;
-                    });
-            hookClusterInfo = clusters[0];
+            if(clusters.size()==0){
+                hookClusterInfo.centroid = seed_point_eigen_;
+            }
+            else if(clusters.size()==1){
+                hookClusterInfo = clusters[0];
+            }
+            else{
+               // 按质心到直线距离排序
+                std::sort(clusters.begin(), clusters.end(),
+                        [](const ClusterInfo<PointT> &a, const ClusterInfo<PointT> &b){
+                            return a.distance < b.distance;
+                        });
+                hookClusterInfo = clusters[0];
+            }
         }
         else{
             hookClusterInfo.centroid = seed_point_eigen_;
@@ -930,6 +938,11 @@ bool HookLoadPositionAcquirer<PointT>::getHookLoadCluster(  typename pcl::PointC
         #endif
 
         return true;
+    }
+    catch (const pcl::PCLException& e)
+    {
+        ROS_ERROR("[getHookLoadCluster] PCLException: %s", e.what());
+        return false;
     }
     catch(const std::exception &e){
         ROS_ERROR("[getHookLoadCluster] exception: %s", e.what());
