@@ -381,7 +381,7 @@ int main(int argc, char** argv) {
 
         //绘制场景点云
         viewer->addPointCloud<pcl::PointXYZ>(cloud, "current_frame");
-        viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 1.0, 1.0, 1.0, "current_frame");
+        viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 0.0, 0.0, 1.0, "current_frame");
         
         // // 添加立方体到可视化窗口
         // viewer->addCube(min_point[0], max_point[0], min_point[1], max_point[1], min_point[2], max_point[2], 0.0, 1.0, 0.0, "cube");
