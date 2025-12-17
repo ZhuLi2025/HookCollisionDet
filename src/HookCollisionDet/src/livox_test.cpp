@@ -6,6 +6,7 @@
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/filters/crop_box.h>
 #include <pcl/filters/passthrough.h>
+#include <pcl/io/pcd_io.h>
 
 #include <iostream>
 #include <string>
@@ -23,129 +24,8 @@
 #include <boost/filesystem.hpp>
 namespace fs = boost::filesystem;
 
-#define SAVE_CLOUD 1
-
 using namespace std;
 
-class LivoxReader {
-    public:
-    LivoxReader():accumulated_cloud(new pcl::PointCloud<pcl::PointXYZI>())
-    {
-        // accumulated_cloud(new pcl::PointCloud<pcl::PointXYZI>());
-        // 订阅Livox发布的PointCloud2话题（根据实际驱动配置调整）
-        sub_ = nh_.subscribe("/livox/lidar", 10, &LivoxReader::cloudCallback, this);
-        
-        // 可选：发布处理后的点云
-        pub_ = nh_.advertise<sensor_msgs::PointCloud2>("/processed_cloud", 1);
-        
-        ROS_INFO("Livox reader node initialized");
-    }
-
-    void cloudCallback(const sensor_msgs::PointCloud2ConstPtr& msg) 
-    {   
-        pcl::PointCloud<pcl::PointXYZI>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZI>);
-
-        // pcl::PointCloud<pcl::PointXYZI>::Ptr accumulated_cloud(new pcl::PointCloud<pcl::PointXYZI>);
-        // 将ROS的PointCloud2消息转换为PCL点云对象
-        pcl::fromROSMsg(*msg, *cloud);
-
-        // 累加当前点云到全局累加点云
-        *accumulated_cloud += *cloud;
-
-        //分布出来
-        // 发布处理后的点云
-        num_count--;
-
-        string pcdFilePath;
-
-        if (num_count <=0)
-        {               
-            pcl::toROSMsg(*accumulated_cloud, output);
-            output.header = msg->header;
-            
-            pub_.publish(output);
-
-            num_count =30;
-
-            cout<<"publish  lidar data!!!!!!!!!"<<endl;
-
-            // 保存点云为PCD文件
-            i++;
-
-            pcdFilePath ="/home/xpp/pcd/" + std::to_string(i) + ".pcd";
-
-            #if SAVE_CLOUD
-                if (pcl::io::savePCDFileASCII(pcdFilePath, *accumulated_cloud) == -1) {
-                    PCL_ERROR("Couldn't write file test_pcd.pcd\n");
-                }
-            #endif
-            
-            accumulated_cloud->clear();
-        }
-
-        // 方法1：直接访问原始数据（快速但需了解字段布局）
-        //processRawData(*msg);
-        
-        // 方法2：转换为PCL点云（更易操作但增加开销）
-        //processPCLData(*msg);
-    }
-
-    private:
-    ros::NodeHandle nh_;
-    ros::Subscriber sub_;
-    ros::Publisher pub_;
-
-    // 定义全局累加点云指针
-    sensor_msgs::PointCloud2 output;
-    pcl::PointCloud<pcl::PointXYZI>::Ptr accumulated_cloud;
-    int num_count  =30;
-
-    int i=0;
-
-
-    // 方法1：直接解析PointCloud2数据
-    void processRawData(const sensor_msgs::PointCloud2& cloud) 
-    {
-        int point_step = cloud.point_step;  // 每个点的字节步长
-        int offset_x = 0, offset_y = 4, offset_z = 8;  // XYZ字段偏移（需确认）
-        
-        // 遍历所有点
-        for (size_t i = 0; i < cloud.width * cloud.height; ++i) 
-        {
-            const uint8_t* data_ptr = &cloud.data[i * point_step];
-            
-            // 提取XYZ坐标（假设float32格式）
-            float x = *reinterpret_cast<const float*>(data_ptr + offset_x);
-            float y = *reinterpret_cast<const float*>(data_ptr + offset_y);
-            float z = *reinterpret_cast<const float*>(data_ptr + offset_z);
-            
-            // 示例：打印前5个点
-            if (i < 5) {
-                ROS_INFO_STREAM("Point " << i << ": (" << x << ", " << y << ", " << z << ")");
-            }
-        }
-    }
-
-    // 方法2：转换为PCL点云处理
-    void processPCLData(const sensor_msgs::PointCloud2& cloud) 
-    {
-        pcl::PointCloud<pcl::PointXYZI> pcl_cloud;
-        pcl::fromROSMsg(cloud, pcl_cloud);
-        
-        // 示例：滤波处理（需包含pcl/filters/voxel_grid.h）
-        pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_ptr(new pcl::PointCloud<pcl::PointXYZI>(pcl_cloud));
-        pcl::VoxelGrid<pcl::PointXYZI> voxel_filter;
-        voxel_filter.setInputCloud(cloud_ptr);
-        voxel_filter.setLeafSize(0.05f, 0.05f, 0.05f);  // 5cm体素网格
-        voxel_filter.filter(*cloud_ptr);
-        
-        // 发布处理后的点云
-        sensor_msgs::PointCloud2 output;
-        pcl::toROSMsg(*cloud_ptr, output);
-        output.header = cloud.header;
-        pub_.publish(output);
-    }
-};
 
 int main(int argc, char** argv) {
 
@@ -153,7 +33,11 @@ int main(int argc, char** argv) {
     ros::NodeHandle nh("~");
     int hook_load_position_acquisition_way;
     std::string init_pcd_file,test_pcd_files_dir;
-
+    float rope_len;
+    if(!nh.getParam("rope_len",rope_len)){
+        ROS_ERROR("cant get rope_len");
+        return 0;
+    }
     if(!nh.getParam("test_pcd_files_dir",test_pcd_files_dir)){
         ROS_ERROR("cant get test pcd files dir");
         return 0;
@@ -162,7 +46,6 @@ int main(int argc, char** argv) {
         ROS_ERROR("cant get test pcd file");
         return 0;
     }
-    // LivoxReader reader;
     // ros::spin();
 //================================ 初始化构建 ===================================
     ROS_INFO("================================ Initialization ===================================\n");
@@ -190,16 +73,26 @@ int main(int argc, char** argv) {
 
 //================================ 地毯滤波 ===================================
     ROS_INFO("================================ CSF ===================================\n");
-    // 坐标变换（CSF要求-Z轴方向为重力方向，改变点云坐标系）
-    Eigen::Vector3f current_gravity(1.0f, 0.0f, 0.0f);        // 当前坐标系的重力方向：X轴（即(1, 0, 0)）
-    Eigen::Vector3f target_gravity(0.0f, 0.0f, -1.0f);        // 目标坐标系的重力方向：Z轴（即(0, 0, 1)）
-    Eigen::Vector3f axis = current_gravity.cross(target_gravity);        // 计算旋转轴：即current_gravity与target_gravity的叉积
-    axis.normalize();
-    float angle = acos(current_gravity.dot(target_gravity));        // 计算旋转角度：即current_gravity与target_gravity的点积反余弦
-    Eigen::Matrix3f rotation_matrix;
-    rotation_matrix = Eigen::AngleAxisf(angle, axis); // 使用角轴表示法
+    // 原始雷达坐标系中：X+ 向下，所以 -X 是“向上”
+    Eigen::Vector3f current_up(-1.0f, 0.0f, 0.0f);
+
+    // CSF 期望的“向上”方向
+    Eigen::Vector3f target_up(0.0f, 0.0f, 1.0f);
+    Eigen::Vector3f axis = current_up.cross(target_up);
+    float axis_norm = axis.norm();
+
+    // 处理平行或反向的极端情况（非常重要）
+    if (axis_norm < 1e-6) {
+        axis = Eigen::Vector3f(0, 1, 0); // 任意正交轴
+    } else {
+        axis.normalize();
+    }
+
+    float angle = acos(
+        std::min(1.0f, std::max(-1.0f, current_up.dot(target_up)))
+    );
     Eigen::Affine3f transform = Eigen::Affine3f::Identity();
-    transform.rotate(rotation_matrix);
+    transform.rotate(Eigen::AngleAxisf(angle, axis));
 
     // 旋转点云
     auto start = std::chrono::high_resolution_clock::now();
@@ -211,6 +104,114 @@ int main(int argc, char** argv) {
     std::chrono::duration<double> elapsed = end_coord_transform - start;
     std::cout << "【time】coord transform took " << elapsed.count() << " seconds." << std::endl;
     std::vector<int> ground_indices, non_ground_indices;
+    
+    CSF csf;
+    /**
+        * 是否对地面进行坡度平滑（Slope Smooth）
+        * true  ：允许地面是连续变化的斜坡（推荐）
+        * false ：地面被假设为阶梯或刚性平面
+        *
+        * 影响：
+        * - 开启后对缓坡、起伏地面更友好
+        * - 对向下雷达、非规则地面建议开启
+     */
+    csf.params.bSloopSmooth = true; 
+    /**
+        * 时间步长（Time Step）
+        * 控制每一次迭代中布的“下落速度”
+        *
+        * 物理意义：
+        * - 类似仿真中的 Δt
+        *
+        * 当前值 0.65：
+        * - 偏快
+        * - 有助于快速收敛
+        *
+        * 影响：
+        * - 太小：收敛慢，需要更多迭代
+        * - 太大：可能数值不稳定，布抖动
+        *
+        * 常见稳定范围：0.3 ~ 0.7
+        */
+    csf.params.time_step = 0.65;
+    /**
+        * 地面/非地面分类阈值（单位：米）
+        * 表示：点到最终“布模型”的垂直距离阈值
+        *
+        * 判定逻辑：
+        * |Z_point - Z_cloth| < class_threshold  → 地面点
+        * |Z_point - Z_cloth| ≥ class_threshold  → 非地面点
+        *
+        * 当前值 0.5m：
+        * - 阈值偏大，容忍地面起伏和噪声
+        * - 吊钩雷达有高度噪声时较安全
+        *
+        * 过小风险：
+        * - 大量真实地面被误判为非地面
+        * 过大风险：
+        * - 低矮障碍物被当成地面
+        */
+    csf.params.class_threshold =0.5; 
+    /**
+        * 布模型分辨率（单位：米）
+        * 表示：布网格节点之间的间距
+        *
+        * 本质：
+        * - 控制“布”的空间采样密度
+        * - 决定地面建模的精细程度
+        *
+        * 当前值 0.75m：
+        * - 偏粗
+        * - 更偏向“整体地面趋势”
+        *
+        * 影响：
+        * - 值大：地面被强烈平滑，结果更稳定但细节损失
+        * - 值小：能贴合局部起伏，但对噪声敏感、计算量增加
+        *
+        * 建议：
+        * - 吊钩防碰撞 / 精细分割：0.2 ~ 0.4
+        * - 大范围粗地形：0.5 ~ 1.0
+        */
+    csf.params.cloth_resolution =0.75;
+    /**
+        * 布的刚性（Rigidness）
+        * 表示：布对弯曲的抵抗能力
+        *
+        * 数值含义：
+        * - 小值：布很“软”，容易下陷
+        * - 大值：布很“硬”，更像平板
+        *
+        * 当前值 3：
+        * - 中等偏软
+        * - 能适应轻微起伏地面
+        *
+        * 影响：
+        * - 刚性过小：布会“钻进”坑洼，误判地面
+        * - 刚性过大：布悬空，斜坡地面识别差
+        *
+        * 建议范围：2 ~ 4
+        */
+    csf.params.rigidness = 4;
+    /**
+        * 布下落迭代次数
+        * 表示：布在重力和约束作用下的模拟步数
+        *
+        * 本质：
+        * - 次数越多，布越充分贴合“地面”
+        *
+        * 当前值 500：
+        * - 属于安全偏大的设置
+        * - 有助于复杂地面收敛
+        *
+        * 影响：
+        * - 次数太少：布未贴合就停止，地面抬高
+        * - 次数太多：计算时间增加，但效果提升有限
+        *
+        * 实时系统常用：300 ~ 800
+        */
+    csf.params.interations = 500;
+
+
 
     #ifdef CSF_DATA_TYPE //使用CSF源码中的数据类型
         //--- CSF 地面分割 ---
@@ -222,38 +223,21 @@ int main(int argc, char** argv) {
             csf_cloud.emplace_back(pt.x, pt.y, pt.z);
         }
         // 2. 创建CSF对象并设置参数（由rosparam控制）
-        CSF csf;
         csf.setPointCloud(csf_cloud);
-
-        csf.params.bSloopSmooth = true;
-        csf.params.class_threshold = 0.3;
-        csf.params.cloth_resolution = 0.75;
-        csf.params.interations = 500;
-        csf.params.rigidness = 3;
-        csf.params.time_step = 0.65;
         // 3. 调用CSF分割
         csf.do_filtering(ground_indices, non_ground_indices, false);
-                            auto end_CSF = std::chrono::high_resolution_clock::now();
+        auto end_CSF = std::chrono::high_resolution_clock::now();
         elapsed = end_CSF - end_coord_transform;
         std::cout << "【time】CSF  took " << elapsed.count() << " seconds." << std::endl;
 
     #else //使用pcl的数据类型
-        CSF csf;
         csf.setPointCloud(transformed_cloud);
-
-        csf.params.bSloopSmooth = true;
-        csf.params.class_threshold = 0.3;
-        csf.params.cloth_resolution = 0.75;
-        csf.params.interations = 500;
-        csf.params.rigidness = 3;
-        csf.params.time_step = 0.65;
-
         csf.do_filtering_v2(ground_indices, non_ground_indices, false);
         auto end_CSF = std::chrono::high_resolution_clock::now();
         elapsed = end_CSF - end_coord_transform;
         std::cout << "【time】CSF took " << elapsed.count() << " seconds." << std::endl;
     #endif
-
+    ROS_INFO("num total pts:%d ; num ground pts:%d ; num off ground pts: %d",transformed_cloud->size(),ground_indices.size(),non_ground_indices.size());
     // 提取地面/非地面点云
     pcl::PointIndices::Ptr ground_idx(new pcl::PointIndices);
     pcl::PointIndices::Ptr obstacle_idx(new pcl::PointIndices);
@@ -270,14 +254,19 @@ int main(int argc, char** argv) {
     extract.setNegative(false);
     extract.filter(*off_ground_cloud);
 
+    // 假设 cloud 已经填充数据
+    transformed_cloud->width  = transformed_cloud->points.size();
+    transformed_cloud->height = 1;
+    transformed_cloud->is_dense = false;
+
+    pcl::io::savePCDFileASCII("output_off_ground_cloud.pcd", *transformed_cloud);
     // 计算逆变换矩阵（后续吊钩吊载检测坐标系为未转换的坐标系，因此转换回去）
     Eigen::Affine3f inverse_transform = transform.inverse();
     pcl::transformPointCloud(*off_ground_cloud,*off_ground_cloud,inverse_transform);
     
 //================================ 吊钩吊载识别 ===================================
     ROS_INFO("================================ Hook/Load Detection ===================================\n");
-    //定义已知参数
-    float rope_len{63.0}; //卷扬绳下放长度
+    
     bool load_exist_flag{false}; //吊钩存在标志为
     b_hookload_position_acquisition_successed = hookLoadPositionAcquirer->getHookLoadCluster(off_ground_cloud,rope_len,load_exist_flag,hookClusterInfo,loadClusterInfo);
     Mode curFrameTargetDetMode ;
@@ -308,6 +297,7 @@ int main(int argc, char** argv) {
     viewer->setBackgroundColor(0, 0, 0);
 
 //================================ 吊钩吊载跟踪 ===================================
+#ifndef HOOK_DET_DEBUG
     ROS_INFO("================================ Hook/Load Track ===================================\n");
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
     // 读取目录下所有 pcd 文件
@@ -405,5 +395,17 @@ int main(int argc, char** argv) {
         sleep(1);
         idx = (idx + 1) % pcd_files.size();   // 循环读取   
     }
+#endif
+        // //初始点云
+        // viewer->addPointCloud<pcl::PointXYZ>(init_cloud, "init_cloud");
+        // viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 1.0, 1.0, 1.0, "init_cloud");
+        //CSF滤波点云
+        viewer->addPointCloud<pcl::PointXYZ>(off_ground_cloud, "off_ground_cloud");
+        viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 1.0, 0.0, 0.0, "off_ground_cloud");
+        
+        while (!viewer->wasStopped())
+        {
+            viewer->spinOnce();
+        }
     return 0;
 }

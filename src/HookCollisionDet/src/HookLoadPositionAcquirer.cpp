@@ -617,7 +617,7 @@ bool HookLoadPositionAcquirer<PointT>::getHookLoadCluster(  typename pcl::PointC
 
     // step4 提取吊钩点云
         typename pcl::PointCloud<PointT>::Ptr seedregion_cloud(new pcl::PointCloud<PointT>);
-        float x_range{10.0}, y_range{30.0}, z_range{30.0};
+        float x_range{30.0}, y_range{30.0}, z_range{30.0};
         pass_z.setInputCloud(cloud);
         pass_z.setFilterFieldName("z");
         pass_z.setFilterLimits(seed_point.z-z_range / 2,seed_point.z+z_range/ 2);
@@ -886,8 +886,8 @@ bool HookLoadPositionAcquirer<PointT>::getHookLoadCluster(  typename pcl::PointC
         elapsed = end - start;
         std::cout << "total took " << elapsed.count() << " seconds." << std::endl;
 
+//============================== 可视化 =====================================
         #ifdef VIS_DEBUG_MODE
-            // 可视化调试
             pcl::visualization::PCLVisualizer::Ptr viewer(new pcl::visualization::PCLVisualizer("Simple PointT Cloud Visualization"));
             viewer->setBackgroundColor(0, 0, 0);
             // 场景点云
@@ -919,13 +919,13 @@ bool HookLoadPositionAcquirer<PointT>::getHookLoadCluster(  typename pcl::PointC
             viewer->setShapeRenderingProperties(pcl::visualization::PCL_VISUALIZER_REPRESENTATION, pcl::visualization::PCL_VISUALIZER_REPRESENTATION_WIREFRAME, "filter region2");
 
             // 吊钩点云可视化
-            if(hook_cluster!=nullptr){
-                pcl::visualization::PointCloudColorHandlerCustom<PointT> hook_cluster_color(hook_cluster, 0, 255, 0);
-                viewer->addPointCloud<PointT>(hook_cluster, hook_cluster_color, "hook_cluster_color");
+            if(hookClusterInfo.exist()){
+                pcl::visualization::PointCloudColorHandlerCustom<PointT> hook_cluster_color(hookClusterInfo.cloud, 0, 255, 0);
+                viewer->addPointCloud<PointT>(hookClusterInfo.cloud, hook_cluster_color, "hook_cluster_color");
                 viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, "hook_cluster_color");
             }
             // 吊载点云可视化
-            if(loadClusterInfo.cloud!=nullptr){
+            if(loadClusterInfo.exist()){
                 pcl::visualization::PointCloudColorHandlerCustom<PointT> load_cluster_color(loadClusterInfo.cloud, 255, 255, 0);
                 viewer->addPointCloud<PointT>(loadClusterInfo.cloud, load_cluster_color, "load_cluster_color");
                 viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, "load_cluster_color");

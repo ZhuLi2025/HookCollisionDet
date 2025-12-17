@@ -100,43 +100,24 @@ void CSF::setPointCloud(csf::PointCloud& pc) {
 void CSF::setPointCloud(pcl::PointCloud<pcl::PointXYZ>::Ptr& pc) {
     point_cloud_->points.clear();
     point_cloud_->points.reserve(pc->points.size());
-    #ifdef USE_OPENMP
-    #pragma omp parallel for
-    #endif
-    for (int i=0; i<pc->points.size();i++) {
-        pcl::PointXYZ point;
-        point.x = pc->points[i].x;
-        point.y = -pc->points[i].z;
-        point.z = pc->points[i].y;
-        point_cloud_->points.push_back(point);
 
-
+    Eigen::Matrix3f rotation;
+    rotation<<  1,0,0,
+                0,0,-1,
+                0,1,0;
+    Eigen::Affine3f transform = Eigen::Affine3f::Identity();
+    transform.rotate(rotation);
+    pcl::transformPointCloud(*pc ,  *point_cloud_,transform);
+    for (auto  pt: point_cloud_->points) {
         // 更新最小最大点
-        bbMin.x = std::min(bbMin.x, point.x);
-        bbMin.y = std::min(bbMin.y, point.y);
-        bbMin.z = std::min(bbMin.z, point.z);
+        bbMin.x = std::min(bbMin.x, pt.x);
+        bbMin.y = std::min(bbMin.y, pt.y);
+        bbMin.z = std::min(bbMin.z, pt.z);
 
-        bbMax.x = std::max(bbMax.x, point.x);
-        bbMax.y = std::max(bbMax.y, point.y);
-        bbMax.z = std::max(bbMax.z, point.z);
+        bbMax.x = std::max(bbMax.x, pt.x);
+        bbMax.y = std::max(bbMax.y, pt.y);
+        bbMax.z = std::max(bbMax.z, pt.z);
     }
-    // Eigen::Matrix3f rotation;
-    // rotation<<  1,0,0,
-    //             0,0,-1,
-    //             0,1,0;
-    // Eigen::Affine3f transform = Eigen::Affine3f::Identity();
-    // transform.rotate(rotation);
-    // pcl::transformPointCloud(*pc ,  *point_cloud_,transform);
-    // for (auto  pt: point_cloud_->points) {
-    //     // 更新最小最大点
-    //     bbMin.x = std::min(bbMin.x, pt.x);
-    //     bbMin.y = std::min(bbMin.y, pt.y);
-    //     bbMin.z = std::min(bbMin.z, pt.z);
-
-    //     bbMax.x = std::max(bbMax.x, pt.x);
-    //     bbMax.y = std::max(bbMax.y, pt.y);
-    //     bbMax.z = std::max(bbMax.z, pt.z);
-    // }
 }
 void CSF::readPointsFromFile(std::string filename) {
     this->point_cloud.resize(0);

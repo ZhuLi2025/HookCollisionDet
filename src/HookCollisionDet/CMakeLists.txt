@@ -26,8 +26,9 @@ if(OpenMP_CXX_FOUND)
     message("found openMP!!!")
     add_compile_definitions("USE_OPENMP")
 endif()
-#add_compile_definitions("CSF_DATA_TYPE")
-#add_compile_definitions("VIS_DEBUG_MODE")
+# add_compile_definitions("CSF_DATA_TYPE")
+add_compile_definitions("VIS_DEBUG_MODE")
+add_compile_definitions("HOOK_DET_DEBUG")
 
 catkin_package(
 #  INCLUDE_DIRS include
