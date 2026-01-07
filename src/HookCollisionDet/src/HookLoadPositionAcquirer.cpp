@@ -529,7 +529,7 @@ bool HookLoadPositionAcquirer<PointT>::getHookLoadCluster(  typename pcl::PointC
 
         //  第一次滤波 - Z轴
         typename pcl::PointCloud<PointT>::Ptr cloud_filtered(new pcl::PointCloud<PointT>);
-        float width_filter{10.0}, height_filter{10.0}, depth_filter{20.0};
+        float width_filter{10.0}, height_filter{10.0}, depth_filter{40.0};
         pcl::PassThrough<PointT> pass_z;
         pass_z.setInputCloud(cloud);
         pass_z.setFilterFieldName("z");
@@ -551,7 +551,7 @@ bool HookLoadPositionAcquirer<PointT>::getHookLoadCluster(  typename pcl::PointC
             return false;
         }
 
-        // 第二次滤波 - Y轴
+        // 第三次滤波 - Y轴
         pcl::PassThrough<PointT> pass_y;
         pass_y.setInputCloud(cloud_filtered);
         pass_y.setFilterFieldName("y");
@@ -564,6 +564,26 @@ bool HookLoadPositionAcquirer<PointT>::getHookLoadCluster(  typename pcl::PointC
         Eigen::Vector3f originalCenter(depth_filter / 2, 0, 0);
         Eigen::Quaternionf rotation = Eigen::Quaternionf::Identity();
 
+
+        // 第四次滤波 - 圆锥滤波
+        const float theta_deg = 15.0f;         // 30度锥角，半角 θ = 15°
+        const float tan_theta_sq = pow(tan(theta_deg * M_PI / 180.0), 2);
+
+        typename pcl::PointCloud<PointT>::Ptr cloud_cone(new pcl::PointCloud<PointT>);
+        cloud_cone->reserve(cloud_filtered->size()); // 预分配空间，避免频繁扩容
+
+        for (const auto& pt : cloud_filtered->points) {
+            // 1. 排除非法的 NaN 点
+            if (!std::isfinite(pt.x) || !std::isfinite(pt.y) || !std::isfinite(pt.z)) continue;
+
+            // 2. 锥形几何判定：x^2 + y^2 <= z^2 * tan^2(theta)
+            float dist_sq_yz = pt.y * pt.y + pt.z * pt.z;
+            float cone_boundary_sq = pt.x * pt.x * tan_theta_sq;
+
+            if (dist_sq_yz <= cone_boundary_sq) {
+                cloud_cone->push_back(pt);
+            }
+        }
         // 获取开始时间
         auto end_step1 = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsed = end_step1 - start;
@@ -573,11 +593,11 @@ bool HookLoadPositionAcquirer<PointT>::getHookLoadCluster(  typename pcl::PointC
         Eigen::Vector3d weighted_centerid;
         Eigen::Vector3d direction;
         // 检查点数足够做 SVD
-        if (static_cast<int>(cloud_filtered->size()) < MIN_POINTS_FOR_SVD) {
-            ROS_WARN("[step2] Not enough points for fitLineSVD: %d", (int)cloud_filtered->size());
+        if (static_cast<int>(cloud_cone->size()) < MIN_POINTS_FOR_SVD) {
+            ROS_WARN("[step2] Not enough points for fitLineSVD: %d", (int)cloud_cone->size());
             return false;
         }
-        if(!fitLineSVD(weighted_centerid, direction, cloud_filtered)){
+        if(!fitLineSVD(weighted_centerid, direction, cloud_cone)){
             ROS_ERROR("[getHookLoadCluster] input cloud is null");
             return false;
         }
@@ -901,8 +921,8 @@ bool HookLoadPositionAcquirer<PointT>::getHookLoadCluster(  typename pcl::PointC
             viewer->addCube(originalCenter, rotation, depth_filter, height_filter, width_filter, "filter region");
             viewer->setShapeRenderingProperties(pcl::visualization::PCL_VISUALIZER_REPRESENTATION, pcl::visualization::PCL_VISUALIZER_REPRESENTATION_WIREFRAME, "filter region");
             // 绳索点云
-            pcl::visualization::PointCloudColorHandlerCustom<PointT> cloud_line_color(cloud_filtered, 255, 0, 255);
-            viewer->addPointCloud<PointT>(cloud_filtered, cloud_line_color, "cloud_line_color");
+            pcl::visualization::PointCloudColorHandlerCustom<PointT> cloud_line_color(cloud_cone, 255, 0, 255);
+            viewer->addPointCloud<PointT>(cloud_cone, cloud_line_color, "cloud_line_color");
             viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 2, "cloud_line_color");
 
             viewer->addLine<PointT>(p1, p2, 1.0, 0.0, 0.0, "pca_line"); // 红色直线

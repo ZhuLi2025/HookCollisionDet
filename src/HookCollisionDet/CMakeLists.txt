@@ -10,14 +10,10 @@ find_package(catkin REQUIRED COMPONENTS
         roscpp
         rospy
         std_msgs
-        #pcl_ros
-        #pcl_conversions
 )
 
 # 设置PCL的自定义安装路径
-set(PCL_DIR "/usr/local/share/pcl-1.12")
 find_package(PCL 1.12 REQUIRED)
-find_package(PCL  REQUIRED )
 find_package(Boost REQUIRED COMPONENTS filesystem)
 
 
@@ -76,7 +72,6 @@ add_executable(HookCollisionDet
                 src/ICPTracker.cpp
                 src/CollisionDetector.cpp
                 ${CSF_SOURCES}
-# src/CounterweightCrack.cpp
 )
 
 target_link_libraries(  HookCollisionDet 
