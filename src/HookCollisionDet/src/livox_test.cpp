@@ -6,6 +6,7 @@
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/filters/crop_box.h>
 #include <pcl/filters/passthrough.h>
+#include <pcl/filters/approximate_voxel_grid.h>
 #include <pcl/io/pcd_io.h>
 
 #include <iostream>
@@ -69,6 +70,20 @@ int main(int argc, char** argv) {
         return false;
     }
 
+    // 声明滤波器
+    pcl::VoxelGrid<pcl::PointXYZ> sor;
+    // 设置输入点云
+    sor.setInputCloud(init_cloud);
+    // 设置体素叶子大小 (例如 0.2m)
+    sor.setLeafSize(0.2f, 0.2f, 0.2f);
+    // 执行滤波
+    pcl::PointCloud<pcl::PointXYZ>::Ptr filtered_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+    auto vox_start = std::chrono::high_resolution_clock::now();
+    sor.filter(*filtered_cloud);
+    auto vox_end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> vox_eps = vox_end - vox_start;
+    std::cout << "【time】coord transform took " << vox_eps.count() << " seconds." << std::endl;
+
     auto start0 = std::chrono::high_resolution_clock::now();
 
 //================================ 地毯滤波 ===================================
@@ -98,7 +113,7 @@ int main(int argc, char** argv) {
     auto start = std::chrono::high_resolution_clock::now();
     // 使用 pcl::transformPointCloud 进行坐标变换
     pcl::PointCloud<pcl::PointXYZ>::Ptr transformed_cloud(new pcl::PointCloud<pcl::PointXYZ>());
-    pcl::transformPointCloud(*init_cloud, *transformed_cloud, transform);
+    pcl::transformPointCloud(*filtered_cloud, *transformed_cloud, transform);
 
     auto end_coord_transform = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = end_coord_transform - start;
@@ -297,7 +312,6 @@ int main(int argc, char** argv) {
     viewer->setBackgroundColor(0, 0, 0);
 
 //================================ 吊钩吊载跟踪 ===================================
-#ifndef HOOK_DET_DEBUG
     ROS_INFO("================================ Hook/Load Track ===================================\n");
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
     // 读取目录下所有 pcd 文件
@@ -318,7 +332,7 @@ int main(int argc, char** argv) {
 
     int idx = 0;
     ClusterInfo<pcl::PointXYZ> targetClusterInfo_cur_frame;
-    while (1)
+    while (!viewer->wasStopped())
     {
         string pcdFilePath = pcd_files[idx];
 
@@ -328,18 +342,24 @@ int main(int argc, char** argv) {
             idx = (idx + 1) % pcd_files.size();
             continue;
         }
+        // 设置输入点云
+        sor.setInputCloud(cloud);
+        sor.setLeafSize(0.5f, 0.5f, 0.5f);
+        pcl::PointCloud<pcl::PointXYZ>::Ptr vox_filtered_cloud(new pcl::PointCloud<pcl::PointXYZ>());
+        sor.filter(*vox_filtered_cloud);
+        ROS_INFO("vox_filtered_cloud.size():  %d",vox_filtered_cloud->size());
 
         auto start_track = std::chrono::high_resolution_clock::now();
 
     // step 1 IPC 匹配吊钩模板点云 与 当前帧点云
         pcl::PointCloud<pcl::PointXYZ>::Ptr env_cloud(new pcl::PointCloud<pcl::PointXYZ>());
-        if(!icpTrack->targetTrack(cloud,targetClusterInfo_last_frame,targetClusterInfo_cur_frame,env_cloud)){
+        if(!icpTrack->targetTrack(vox_filtered_cloud,targetClusterInfo_last_frame,targetClusterInfo_cur_frame,env_cloud)){
             ROS_INFO("icp track failed");
             continue;
         }
         targetClusterInfo_last_frame = targetClusterInfo_cur_frame; //深拷贝上帧的吊钩点云识别结果作为下一帧的匹配模板，如果识别错误则后续全部错误
-    
-   
+        ROS_INFO("env_cloud.size():  %d",env_cloud->size());
+
     // step 2 Collision Detecte
         auto start_detection = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> eps_track  = start_detection - start_track;
@@ -359,18 +379,13 @@ int main(int argc, char** argv) {
         std::chrono::duration<double> eps_detection  = end_detection - start_detection;
         ROS_INFO("detection took time : %f",eps_detection.count());
 
-
+    // step 3 Visualization
         //碰撞分析
         viewer->removeAllPointClouds();
         viewer->removeAllShapes();
 
-        // 吊钩周围区域
-        // viewer->addCube(bbMin[0], bbMax[0], bbMin[1], bbMax[1], bbMin[2], bbMax[2], 1.0, 1.0, 0.0, "cube1");
-        // viewer->setShapeRenderingProperties(pcl::visualization::PCL_VISUALIZER_REPRESENTATION, 
-        //                                     pcl::visualization::PCL_VISUALIZER_REPRESENTATION_WIREFRAME, "cube1");
-
         //绘制场景点云
-        viewer->addPointCloud<pcl::PointXYZ>(cloud, "current_frame");
+        viewer->addPointCloud<pcl::PointXYZ>(vox_filtered_cloud, "current_frame");
         viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 0.0, 0.0, 1.0, "current_frame");
         
         // // 添加立方体到可视化窗口
@@ -388,24 +403,31 @@ int main(int argc, char** argv) {
         pcl::PointXYZ p2 (p1.x+min_dist*dir.x(),p1.y+min_dist*dir.y(),p1.z+min_dist*dir.z());
         viewer->addLine<pcl::PointXYZ,pcl::PointXYZ>(p1,p2,1.0,1.0,0.0,"distance to obstacle");
 
-        // viewer->addPointCloud<pcl::PointXYZ>(final_cloud, "obstacle_cloud");
-        // viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 1.0, 0.0, 0.0, "obstacle_cloud");
+        pcl::PointCloud<pcl::PointXYZRGB>::Ptr env_display_cloud(new pcl::PointCloud<pcl::PointXYZRGB>());
+        float safest_dist =1475;
+        float dist2cent;
+        for(const auto &p:env_cloud->points){
+            pcl::PointXYZRGB p_display;
+            p_display.x = p.x;
+            p_display.y = p.y;
+            p_display.z = p.z;
+            p_display.g = 0;
+            //计算距离
+            dist2cent =  pow(p1.x-p.x,2)+pow(p1.y-p.y,2)+pow(p1.z-p.z,2);
+            p_display.r = dist2cent>safest_dist?0:int(pow((1-dist2cent/safest_dist),3)*255);
+            p_display.b = dist2cent>safest_dist?255:int(pow(dist2cent/safest_dist,3)*255);
+            env_display_cloud->push_back(p_display);
+        }
+        // 防碰撞监测的周围场景的点云
+        if (!viewer->updatePointCloud(env_display_cloud, "env_cloud")) {
+            viewer->addPointCloud(env_display_cloud, "env_cloud");
+        }
+        viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE,2, "env_cloud");
+
         // 刷新可视化窗口
-        viewer->spinOnce(100);
+        viewer->spinOnce();
         sleep(1);
         idx = (idx + 1) % pcd_files.size();   // 循环读取   
     }
-#endif
-        // //初始点云
-        // viewer->addPointCloud<pcl::PointXYZ>(init_cloud, "init_cloud");
-        // viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 1.0, 1.0, 1.0, "init_cloud");
-        //CSF滤波点云
-        viewer->addPointCloud<pcl::PointXYZ>(off_ground_cloud, "off_ground_cloud");
-        viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 1.0, 0.0, 0.0, "off_ground_cloud");
-        
-        while (!viewer->wasStopped())
-        {
-            viewer->spinOnce();
-        }
     return 0;
 }
