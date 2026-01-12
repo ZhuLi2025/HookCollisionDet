@@ -269,19 +269,13 @@ int main(int argc, char** argv) {
     extract.setNegative(false);
     extract.filter(*off_ground_cloud);
 
-    // 假设 cloud 已经填充数据
-    transformed_cloud->width  = transformed_cloud->points.size();
-    transformed_cloud->height = 1;
-    transformed_cloud->is_dense = false;
-
-    pcl::io::savePCDFileASCII("output_off_ground_cloud.pcd", *transformed_cloud);
     // 计算逆变换矩阵（后续吊钩吊载检测坐标系为未转换的坐标系，因此转换回去）
     Eigen::Affine3f inverse_transform = transform.inverse();
     pcl::transformPointCloud(*off_ground_cloud,*off_ground_cloud,inverse_transform);
     
 //================================ 吊钩吊载识别 ===================================
     ROS_INFO("================================ Hook/Load Detection ===================================\n");
-    
+    auto start_det = std::chrono::high_resolution_clock::now();   
     bool load_exist_flag{false}; //吊钩存在标志为
     b_hookload_position_acquisition_successed = hookLoadPositionAcquirer->getHookLoadCluster(off_ground_cloud,rope_len,load_exist_flag,hookClusterInfo,loadClusterInfo);
     Mode curFrameTargetDetMode ;
@@ -302,9 +296,9 @@ int main(int argc, char** argv) {
     else{
         ROS_INFO("[Hook / Load detection] cant find load or hook cluster");
     }
-    auto end = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> eps  = end - start0;
-    ROS_INFO("hood det took time : %f",eps.count());
+    auto end_det = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> eps_det  = end_det - start_det;
+    ROS_INFO("hood det took time : %f",eps_det.count());
 
 
     //可视化
